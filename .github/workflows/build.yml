@@ -1,14 +1,16 @@
-name: Cross-Platform Build
+name: Wails Cross-Platform Build
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # 允許手動觸發
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # 允許在 GitHub 介面手動觸發
 
 jobs:
   build:
     strategy:
-      # 矩陣設定：同時跑三種作業系統
+      fail-fast: false # 即使其中一個平台失敗，其他平台仍繼續編譯
       matrix:
         include:
           - os: windows-latest
@@ -24,50 +26,59 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
+      - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      - name: Setup Go
+      - name: 設定 Go 環境
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
           cache: true
 
-      - name: Setup Node
+      - name: 設定 Node.js 環境
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
-      # Linux 需要額外的依賴庫來編譯 WebKitGTK
-      - name: Install Linux Dependencies
+      # 修正後的 Linux 依賴安裝 (使用 4.1-dev)
+      - name: 安裝 Linux 依賴
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
-      - name: Install Wails CLI
+      - name: 安裝 Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Build App
+      - name: 安裝前端依賴
+        run: cd frontend && npm install
+
+      - name: 執行 Wails Build
         run: |
+          # 使用 -clean 確保資源重新封裝
           wails build -platform ${{ matrix.platform }} -clean
 
-      # 將編譯好的檔案移動到統一的分類資料夾（選用）
-      - name: Prepare Artifact Path
+      - name: 整理輸出路徑
         shell: bash
         run: |
-          mkdir -p build/bin/${{ matrix.output_name }}
-          # Windows 會產出 .exe，macOS 是 .app，Linux 是無副檔名二進位檔
+          # 建立目標目錄 build/bin/<platform>
+          mkdir -p "build/bin/${{ matrix.output_name }}"
+          
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv build/bin/*.exe build/bin/${{ matrix.output_name }}/ || true
+            # 搬移 .exe 檔案
+            mv build/bin/*.exe "build/bin/${{ matrix.output_name }}/" || true
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            mv build/bin/*.app build/bin/${{ matrix.output_name }}/ || true
+            # 搬移 .app 資料夾 (macOS 其實是一個目錄)
+            mv build/bin/*.app "build/bin/${{ matrix.output_name }}/" || true
           else
-            mv build/bin/* build/bin/${{ matrix.output_name }}/ || true
+            # Linux 搬移無副檔名的二進位檔，排除剛建立的資料夾自身
+            find build/bin/ -maxdepth 1 -type f -exec mv {} "build/bin/${{ matrix.output_name }}/" \;
           fi
 
-      - name: Upload Artifacts
+      - name: 上傳成品 (Artifacts)
         uses: actions/upload-artifact@v4
         with:
-          name: wails-build-${{ matrix.output_name }}
+          name: wails-app-${{ matrix.output_name }}
           path: build/bin/${{ matrix.output_name }}/
