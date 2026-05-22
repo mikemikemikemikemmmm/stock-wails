@@ -11,6 +11,8 @@ import {
 } from 'chart.js';
 import { GetData } from '../wailsjs/go/main/App';
 
+const GET_DATA_INTERVAL_MS = 1000*10 //10 second
+
 const verticalLinePlugin = {
   id: 'verticalLine',
   afterDraw(chart) {
@@ -59,6 +61,14 @@ Chart.register(
   verticalLinePlugin, horizontalLinePlugin
 );
 
+const calcCumulativeAvg = (prices) => {
+  let sum = 0;
+  return prices.map((v, i) => {
+    sum += v;
+    return sum / (i + 1);
+  });
+};
+
 const setData = async (c) => {
   let stockData = [];
   try {
@@ -67,8 +77,10 @@ const setData = async (c) => {
     console.error('呼叫後端發生錯誤:', error);
     return;
   }
+  const prices = stockData.map(d => d.price);
   c.data.labels = stockData.map(d => d.time);
-  c.data.datasets[0].data = stockData.map(d => d.price);
+  c.data.datasets[0].data = prices;
+  c.data.datasets[1].data = calcCumulativeAvg(prices);
   c.update();
 };
 
@@ -77,18 +89,29 @@ const chart = new Chart(ctx, {
   type: 'line',
   data: {
     labels: [],
-    datasets: [{
-      data: [],
-      borderColor: 'blue',
-      pointRadius: 2,
-      pointHoverRadius: 2
-    }]
+    datasets: [
+      {
+        label: '價格',
+        data: [],
+        borderColor: 'blue',
+        pointRadius: 2,
+        pointHoverRadius: 2
+      },
+      {
+        label: '均線',
+        data: [],
+        borderColor: 'orange',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 0
+      }
+    ]
   },
   options: {
     interaction: { mode: 'index', intersect: false },
     plugins: {
       tooltip: { mode: 'index', intersect: false, position: 'nearest' },
-      legend: { display: false }
+      legend: { display: true }
     },
     responsive: true,
     maintainAspectRatio: false,
@@ -106,4 +129,4 @@ setData(chart);
 
 window.addEventListener('resize', () => chart.resize());
 
-setInterval(() => setData(chart), 1000 * 30);
+setInterval(() => setData(chart), GET_DATA_INTERVAL_MS);

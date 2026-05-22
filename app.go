@@ -75,15 +75,17 @@ func isDaySession() bool {
 func (a *App) GetData() ([]Data, error) {
 	if isDaySession() {
 		return fetchData(dayFuturesURL)
+	} else {
+		return fetchData(nightFuturesURL)
 	}
 
-	dayData, err := fetchData(dayFuturesURL)
-	if err != nil {
-		return nil, err
-	}
-	nightData, err := fetchData(nightFuturesURL)
-	if err != nil {
-		return nil, err
-	}
-	return append(dayData, nightData...), nil
+	// dayData, err := fetchData(dayFuturesURL)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// nightData, err := fetchData(nightFuturesURL)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return append(dayData, nightData...), nil
 }
